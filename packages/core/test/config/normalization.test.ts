@@ -57,6 +57,11 @@ function withoutEmptyCompatibilityContainers(input: Record<string, unknown>) {
 }
 
 describe("ConfigNormalize", () => {
+  test("keeps the goal round limit and reports an invalid one", () => {
+    expect(decoded({ goal: { max_rounds: 150 } }).goal).toEqual({ max_rounds: 150 })
+    expect(normalized({ goal: { max_rounds: 0 } }).diagnostics.some((item) => item.kind === "invalid")).toBe(true)
+  })
+
   test("accepts tool.use without losing statement order", () => {
     const policies = [
       { action: "tool.use", effect: "deny", resource: "shell:*" },

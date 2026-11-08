@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Layer, Option, Schedule, Schema, Stream } from "effect"
 import { AIError, InvalidRequestError, LanguageModel, type LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
@@ -11,12 +11,14 @@ import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Model } from "@opencode/core/model"
-import { GoalPlugin } from "@opencode/core/plugin/goal"
+import { GoalPlugin, roundLimit } from "@opencode/core/plugin/goal"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigGoal } from "@opencode/schema/config/goal"
 import { Goal } from "@opencode/schema/goal"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -477,6 +479,41 @@ describe("goal plugin", () => {
 
       yield* sessions.command({ sessionID: session.id, command: "goal", text: "clear" })
       expect(yield* goal(session.id)).toBeUndefined()
+    }),
+  )
+
+  test("selects the configured round limit and falls back to the default", () => {
+    expect(roundLimit([])).toBe(50)
+    expect(
+      roundLimit([
+        new Document({
+          type: "document",
+          info: new Info({ goal: new ConfigGoal.Info({ max_rounds: 150 }) }),
+        }),
+      ]),
+    ).toBe(150)
+  })
+
+  it.live("pauses at the stored round limit and keeps it on resume", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+      const verdicts = reviewer('{"verdict":"continue","reason":"Almost there."}')
+      yield* serve(verdicts.respond)
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "Keep going" })
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "pause" })
+      const paused = yield* goal(session.id)
+      expect(paused).toMatchObject({ status: "paused" })
+      yield* setGoal(session.id, { ...paused!, maxRounds: 2 })
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "resume" })
+      yield* sessions.wait(session.id)
+      expect(yield* goal(session.id)).toMatchObject({
+        status: "paused",
+        reason: "Reached the limit of 2 rounds",
+        maxRounds: 2,
+      })
     }),
   )
 })

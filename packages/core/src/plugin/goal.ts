@@ -3,10 +3,12 @@ export * as GoalPlugin from "./goal.js"
 import { isContextOverflowFailure, Message } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
+import type { Entry } from "@opencode/schema/config"
 import { Goal } from "@opencode/schema/goal"
 import { Session } from "@opencode/schema/session"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
 import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
+import { Config } from "../config.js"
 import CONTINUATION from "./goal/continuation.txt"
 import JUDGE from "./goal/judge.txt"
 import KICKOFF from "./goal/kickoff.txt"
@@ -15,6 +17,11 @@ import REMINDER from "./goal/reminder.txt"
 export const MAX_OBJECTIVE = 4_000
 export const MAX_ROUNDS = 50
 export const MAX_STALLS = 3
+
+/** The configured round backstop, falling back to MAX_ROUNDS when the user has not set one. */
+export function roundLimit(entries: readonly Entry[]) {
+  return Config.latest(entries, "goal")?.max_rounds ?? MAX_ROUNDS
+}
 /** How long an active goal may sit idle, waiting on background work that never reports, before it pauses. */
 export const WAIT_LIMIT = Duration.minutes(30)
 // Identifies this server process. A goal armed by an earlier process comes back paused instead of resuming on its own.
@@ -40,6 +47,7 @@ const USAGE = "Usage: /goal <objective> | pause | resume | clear"
 export const Plugin = define({
   id: "opencode.goal",
   effect: Effect.fn(function* (ctx) {
+    const config = yield* Config.Service
     const read = Effect.fn("GoalPlugin.read")(function* (sessionID: string) {
       return Option.getOrUndefined(decodeState(yield* ctx.storage.get(PREFIX + sessionID)))
     })
@@ -394,7 +402,7 @@ export const Plugin = define({
               objective: text,
               status: "active",
               rounds: 0,
-              maxRounds: MAX_ROUNDS,
+              maxRounds: roundLimit(yield* config.entries()),
               boot: boot(),
               updatedAt: yield* Clock.currentTimeMillis,
             }

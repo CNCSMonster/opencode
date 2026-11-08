@@ -5,6 +5,7 @@ import type { Plugin } from "@opencode/plugin/effect"
 import type { CommandDefinition } from "@opencode/plugin/effect/command"
 import { Event } from "@opencode/schema/event"
 import { Goal } from "@opencode/schema/goal"
+import { Config } from "@opencode/core/config"
 import { GoalPlugin } from "@opencode/core/plugin/goal"
 import { Session } from "@opencode/core/session"
 import type { SessionEvent } from "@opencode/core/session/event"
@@ -92,7 +93,7 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
         reload: () => Effect.die("unused command.reload"),
       },
     }),
-  )
+  ).pipe(Effect.provide(Config.testLayer()))
   // Let the forked event watcher and startup sweep start.
   yield* Effect.yieldNow
   return {

@@ -188,6 +188,13 @@ describe("Config.Entry", () => {
   })
 })
 
+test("decodes a goal round limit and rejects non-positive values", () => {
+  const decoded = Schema.decodeUnknownSync(Config.Info)({ goal: { max_rounds: 150 } })
+  expect(Schema.encodeSync(Config.Info)(decoded)).toEqual({ goal: { max_rounds: 150 } })
+  for (const value of [0, -1, 1.5])
+    expect(() => Schema.decodeUnknownSync(Config.Info)({ goal: { max_rounds: value } })).toThrow()
+})
+
 test("no flag is named after the everything-on switches", () => {
   expect(ConfigFlag.registry).not.toHaveProperty("all_flags")
   expect(ConfigFlag.registry).not.toHaveProperty(ConfigFlag.wildcard)
